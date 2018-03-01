@@ -3,8 +3,17 @@ require 'pp'
 require 'websocket-eventmachine-client'
 require 'websocket-eventmachine-server'
 require 'json'
+require 'sinatra/base'
+
+initial_peers = ENV['']
 
 class Block
+  attr_reader :index,
+              :previous_hash,
+              :timestamp,
+              :data,
+              :hash
+
   def initialize(index, previous_hash, timestamp, data, hash)
     @index = index
     @previous_hash = previous_hash
@@ -12,16 +21,26 @@ class Block
     @data = data
     @hash = hash
   end 
+
+  def to_json(*args)
+    {
+      :index => @index,
+      :previous_hash => @previous_hash,
+      :timestamp => @timestamp,
+      :data => @data,
+      :hash => @hash
+    }.to_json(*args)
+  end
 end
 
 def get_genesis_block
-  Block.new0(0, "0", 1465154705, "my genesis block!!", "816534932c2b7154836da6afc367695e6337db8a921823784c14378abed4f7d7")
+  Block.new(0, "0", 1465154705, "my genesis block!!", "816534932c2b7154836da6afc367695e6337db8a921823784c14378abed4f7d7")
 end
 
-blockchain = [get_genesis_block]
+$blockchain = [get_genesis_block]
 
 def get_latest_block
-  blockchain[blockchain.length - 1]  
+  $blockchain[$blockchain.length - 1]  
 end
 
 def calculate_hash(index, previous_hash, timestamp, data)
@@ -41,7 +60,7 @@ def generate_next_block(block_data)
   previous_block = get_latest_block
   next_index = previous_block.index + 1
   next_time_stamp = Time.now.to_i
-  next_hash = calculate_hash_for_block()
+  next_hash = calculate_hash(next_index, previous_block.hash, next_time_stamp, block_data)
   return Block.new(next_index, previous_block.hash, next_time_stamp, block_data, next_hash)
 end
 
@@ -61,12 +80,12 @@ def is_valid_new_block?(new_block, previous_block)
 end
 
 def add_block(new_block)
-  if is_valid_new_block(new_block, get_latest_block)
-    blockchain.push(new_block)
+  if is_valid_new_block?(new_block, get_latest_block)
+    $blockchain.push(new_block)
   end
 end
 
-sockets = []
+$sockets = []
 module MessageType
   QUERY_LATEST = 0
   QUERY_ALL = 1
@@ -78,13 +97,13 @@ def write(ws, message)
 end
 
 def broadcast(message)
-  sockets.each do |ws|
+  $sockets.each do |ws|
     write(ws, message)
   end
 end
 
 def response_chain_msg
-  { :type => MessageType::RESPONSE_BLOCKCHAIN, :data => blockchain.to_json }
+  { :type => MessageType::RESPONSE_BLOCKCHAIN, :data => $blockchain.to_json }
 end
 
 def response_latest_msg
@@ -95,8 +114,32 @@ def query_all_msg
   { :type => MessageType::QUERY_ALL }
 end
 
-def replace_chain(new_blocks)
+def query_chain_length_msg
+  { :type => MessageType::QUERY_LATEST }
+end
+
+def is_valid_chain?(blockchain_to_validate)
+  if blockchain_to_validate[0].to_json == get_genesis_block.to_json
+    return false
+  end
   
+  for i in 1..blockchain_to_validate.length - 1 do
+    unless is_valid_new_block?(blockchain_to_validate[i], blockchain_to_validate[i] - 1)
+      return false
+    end
+  end
+
+  return true
+end
+
+def replace_chain(new_blocks)
+  if is_valid_chain(new_block) && new_block.length > $blockchain.length
+    pp 'Received blockchain is valid, Replacing current blockchain with received blockchain;'
+    $blockchain = new_blocks
+    broadcast(response_latest_msg)
+  else
+    pp 'Received blockchain is invalid'
+  end
 end
 
 def handle_blockchain_response(message)
@@ -105,7 +148,7 @@ def handle_blockchain_response(message)
   latest_block_held = get_latest_block
   if latest_block_received.index > latest_block_held.index
     if latest_block_held.hash == latest_block_received.previous_hash
-      blockchain.push(latest_block_received)
+      $blockchain.push(latest_block_received)
       broadcast(response_latest_msg)
     elsif received_blocks.length == 1
       broadcast(query_all_msg)
@@ -117,24 +160,77 @@ def handle_blockchain_response(message)
   end
 end
 
-def init_p2p_server
-  WebSocket::EventMachine::Server.start(:host => "0.0.0.0", :port => 8080) do |ws|
-    sockets.push(ws)
-
-    ws.onmessage do |data, type|
-      message = JSON.parse(data)
-      pp 'Received message' + message
-      case message['type']
-      when MessageType::QUERY_LATEST
-        write(ws, response_latest_msg)
-      when MessageType::QUERY_ALL
-        write(ws, response_chain_msg)
-      when MessageType::RESPONSE_BLOCKCHAIN
-
-    end
-
-    ws.onclose do
-      puts "Client disconnected"
+def init_p2p_connections(ws)
+  ws.onmessage do |data, type|
+    message = JSON.parse(data)
+    pp 'Received message' + message
+    case message['type']
+    when MessageType::QUERY_LATEST
+      write(ws, response_latest_msg)
+    when MessageType::QUERY_ALL
+      write(ws, response_chain_msg)
+    when MessageType::RESPONSE_BLOCKCHAIN
+      handle_blockchain_response(message)
     end
   end
+end
+
+def init_p2p_server
+  WebSocket::EventMachine::Server.start(:host => "0.0.0.0", :port => 8080) do |ws|
+    $sockets.push(ws)
+
+    init_p2p_connections(ws)
+
+    ws.onclose do
+      pp 'connection failed to peer' + ws.url
+      $sockets = $sockets.delete(ws)
+    end
+  
+    ws.onerror do
+      pp 'connection failed to peer' + ws.url
+      $sockets = $sockets.delete(ws)
+    end
+
+    write(ws, query_chain_length_msg)
+  end
+end
+
+def connect_to_peers(new_peers)
+  new_peers.each do p
+    ws = WebSocket::EventMachine::Client.connect(:uri => p)
+  
+    ws.onopen do
+      init_p2p_connections(ws)
+    end
+
+    ws.onerror do
+      pp 'connection failed'
+    end
+  end
+end
+
+class App < Sinatra::Base
+  get '/blocks' do
+    $blockchain.to_json
+  end
+
+  post '/mineBlock' do
+    data = JSON.parse(request.body.read)
+    new_block = generate_next_block(data['data'])
+    add_block(new_block)
+    broadcast(response_latest_msg)
+    pp 'block added: ' + new_block.to_json
+  end
+
+  get '/peers' do
+
+  end
+
+  set :port, 3001
+end
+
+App.run!
+
+EM.run do
+  init_p2p_server
 end

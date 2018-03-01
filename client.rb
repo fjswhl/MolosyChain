@@ -9,7 +9,7 @@ EM.run do
     end
   
     ws.onmessage do |msg, type|
-      puts "Received message: #{msg}"
+      puts "Received message: #{msg} #{ws.to_s}"
     end
   
     ws.onclose do |code, reason|
