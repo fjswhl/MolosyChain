@@ -4,8 +4,13 @@ require 'websocket-eventmachine-client'
 require 'websocket-eventmachine-server'
 require 'json'
 require 'sinatra/base'
+require 'thin'
 
-initial_peers = ENV['']
+$initial_peers = ENV['PEERS'] ? ENV['PEERS'].split(',') : []
+$http_port = ENV['HTTP_PORT'] || 3003
+$p2p_port = ENV['P2P_PORT'] || 6003
+
+pp $initial_peers
 
 class Block
   attr_reader :index,
@@ -20,7 +25,11 @@ class Block
     @timestamp = timestamp
     @data = data
     @hash = hash
-  end 
+  end
+
+  def self.from_dic(dic)
+    Block.new(dic['index'], dic['previous_hash'], dic['timestamp'], dic['data'], dic['hash'])
+  end
 
   def to_json(*args)
     {
@@ -103,11 +112,11 @@ def broadcast(message)
 end
 
 def response_chain_msg
-  { :type => MessageType::RESPONSE_BLOCKCHAIN, :data => $blockchain.to_json }
+  { :type => MessageType::RESPONSE_BLOCKCHAIN, :data => $blockchain }
 end
 
 def response_latest_msg
-  { :type => MessageType::RESPONSE_BLOCKCHAIN, :data => [get_latest_block].to_json }
+  { :type => MessageType::RESPONSE_BLOCKCHAIN, :data => [get_latest_block] }
 end
 
 def query_all_msg
@@ -143,9 +152,10 @@ def replace_chain(new_blocks)
 end
 
 def handle_blockchain_response(message)
-  received_blocks = JSON.parse(message['data'].sort { |x, y| x - y })
-  latest_block_received = received_blocks[received_blocks.length - 1]
+  received_blocks = message['data'].sort { |x, y| x - y }
+  latest_block_received = Block.from_dic(received_blocks[received_blocks.length - 1])
   latest_block_held = get_latest_block
+
   if latest_block_received.index > latest_block_held.index
     if latest_block_held.hash == latest_block_received.previous_hash
       $blockchain.push(latest_block_received)
@@ -163,7 +173,7 @@ end
 def init_p2p_connections(ws)
   ws.onmessage do |data, type|
     message = JSON.parse(data)
-    pp 'Received message' + message
+    pp 'Received message' + message.to_s
     case message['type']
     when MessageType::QUERY_LATEST
       write(ws, response_latest_msg)
@@ -176,32 +186,32 @@ def init_p2p_connections(ws)
 end
 
 def init_p2p_server
-  WebSocket::EventMachine::Server.start(:host => "0.0.0.0", :port => 8080) do |ws|
+  WebSocket::EventMachine::Server.start(:host => "0.0.0.0", :port => $p2p_port) do |ws|
     $sockets.push(ws)
 
     init_p2p_connections(ws)
 
+    ws.onopen do
+      pp 'connected'
+      write(ws, query_chain_length_msg)
+    end
+
     ws.onclose do
-      pp 'connection failed to peer' + ws.url
-      $sockets = $sockets.delete(ws)
+      $sockets.delete(ws)
     end
   
     ws.onerror do
-      pp 'connection failed to peer' + ws.url
-      $sockets = $sockets.delete(ws)
+      $sockets.delete(ws)
     end
 
-    write(ws, query_chain_length_msg)
   end
 end
 
 def connect_to_peers(new_peers)
-  new_peers.each do p
+  new_peers.each do |p|
     ws = WebSocket::EventMachine::Client.connect(:uri => p)
-  
-    ws.onopen do
-      init_p2p_connections(ws)
-    end
+
+    init_p2p_connections(ws)
 
     ws.onerror do
       pp 'connection failed'
@@ -226,11 +236,27 @@ class App < Sinatra::Base
 
   end
 
-  set :port, 3001
+  configure do
+    set :threaded, false
+  end
 end
-
-App.run!
 
 EM.run do
+  dispatch = Rack::Builder.app do
+    map '/' do
+      run App.new
+    end
+  end
+
+  Rack::Server.start({
+      app: dispatch,
+      server: 'thin',
+      Host: '0.0.0.0',
+      Port: $http_port,
+      signals: false
+                     })
+
+  connect_to_peers($initial_peers)
   init_p2p_server
 end
+
