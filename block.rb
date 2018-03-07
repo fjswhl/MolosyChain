@@ -44,7 +44,9 @@ class Block
         :previous_hash => @previous_hash,
         :timestamp => @timestamp,
         :data => @data,
-        :hash => @hash
+        :hash => @hash,
+        :difficulty => @difficulty,
+        :nonce => @nonce
     }.to_json(*args)
   end
 
@@ -62,8 +64,15 @@ class Block
     elsif block_hash != @hash
       pp 'invalid hash: ' + block_hash + ' ' + @hash
       return false
+    elsif !is_valid_timestamp?(previous_block)
+      return false
     else
       return true
     end
+  end
+
+  def is_valid_timestamp?(previous_block)
+    previous_block.timestamp - 60 < @timestamp &&
+        @timestamp - 60 < Time.now.to_i
   end
 end
