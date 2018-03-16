@@ -1,5 +1,7 @@
 require 'ecdsa'
 
+COINBASE_AMOUNT = 50
+
 class TxOut
   attr_accessor :address,
                 :amount
@@ -144,5 +146,79 @@ def update_unspent_tx_outs(new_transactions, unspent_tx_outs)
       .select { |utxo| !find_unspent_tx_out(utxo.tx_out_id, utxo.tx_out_index, consumed_tx_outs) }
       + new_unspent_tx_outs
 end
+
+def is_valid_coinbase_tx?(transaction, block_index)
+  if transaction.nil?
+    pp 'the first transaction in the block must be coinbase transaction'
+    return false
+  end
+
+  if get_transaction_id(transaction) != transaction.id
+    pp 'invalid coinbase tx id: ' + transaction.id
+    return false
+  end
+
+  if transaction.tx_ins.length != 1
+    pp 'one txIn must be specified in the coinbase transaction'
+    return false
+  end
+
+  if transaction.tx_ins[0].tx_out_index != block_index
+    pp 'the txIn signature in coinbase tx must be the block height'
+    return false
+  end
+
+  if transaction.tx_outs.length != 1
+    pp 'invalid number of txOuts in coinbase transaction'
+    return false
+  end
+
+  if transaction.tx_outs[0].amount != COINBASE_AMOUNT
+    pp 'invalid coinbase amount in coinbase transaction'
+    return false
+  end
+
+  true
+end
+
+def has_duplicates(tx_ins)
+  group = Hash.new(0)
+  tx_ins.each do |tx_in|
+    key =  tx_in.tx_out_id + tx_in.tx_out_index.to_s
+    group[key] = group[key] + 1
+  end
+
+  group.each do |key, value|
+    pp 'duplicate txIn: ' + key
+    return true
+  end
+
+  false
+end
+
+def is_valid_block_transactions?(transactions, unspent_tx_outs, block_index)
+  coinbase_tx = transactions[0]
+  unless is_valid_coinbase_tx?(coinbase_tx, block_index)
+    pp 'invalid coinbase tran'
+  end
+end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
