@@ -1,6 +1,7 @@
 require 'pp'
 require 'json'
 require_relative 'block'
+require_relative 'transaction'
 
 class BlockChain
 
@@ -12,6 +13,7 @@ class BlockChain
 
   def initialize
     @blocks = [Block.genesis_block]
+    @unspent_tx_outs = []
   end
 
   def get_latest_block
@@ -24,7 +26,12 @@ class BlockChain
     next_time_stamp = Time.now.to_i
 
     block = find_block(next_index, previous_block.hash, next_time_stamp, block_data, difficulty)
-    block
+    if add_block(block)
+      yield
+      return block
+    else
+      return nil
+    end
   end
 
   def find_block(index, previous_hash, timestamp, data, difficulty)
@@ -41,8 +48,17 @@ class BlockChain
 
   def add_block(new_block)
     if new_block.is_valid_next_block?(get_latest_block)
-      @blocks.push(new_block)
+      updated_unspent_outs = process_transactions(new_block.data, @unspent_tx_outs, new_block.index)
+      if updated_unspent_outs.nil?
+        return false
+      else
+        @blocks.push(new_block)
+        @unspent_tx_outs = updated_unspent_outs
+        return true
+      end
     end
+
+    false
   end
 
   def self.is_valid_blocks?(blocks)

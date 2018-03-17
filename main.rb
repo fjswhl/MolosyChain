@@ -22,10 +22,10 @@ end
 
 App.post '/mineBlock' do
   data = JSON.parse(request.body.read)
-  new_block = blockchain.generate_next_block(data['data'])
-  blockchain.add_block(new_block)
-  p2p_network.broadcast_response_latest_msg
-  pp 'block added: ' + new_block.to_json
+  new_block = blockchain.generate_next_block(data['data']) do
+    p2p_network.broadcast_response_latest_msg
+    pp 'block added: ' + new_block.to_json
+  end
 end
 
 EM.run do

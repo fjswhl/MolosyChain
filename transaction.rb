@@ -51,7 +51,7 @@ def get_transaction_id(transaction)
 end
 
 def is_tx_in_valid?(tx_in, transaction, unspent_tx_outs)
-  referenced_tx_out = unspent_tx_outs.find { |utxo| => utxo.tx_out_id == tx_in.tx_out_id && utxo.tx_out_index == tx_in.tx_out_index}
+  referenced_tx_out = unspent_tx_outs.find { |utxo| utxo.tx_out_id == tx_in.tx_out_id && utxo.tx_out_index == tx_in.tx_out_index}
   unless referenced_tx_out
     pp 'referenced txOut not found: ' + tx_in.to_json
   end
@@ -115,7 +115,7 @@ def sign_tx_in(transaction, tx_in_index, private_key, unspent_tx_outs)
   referenced_address = referenced_unspent_tx_out.address
 
   public_key = ECDSA::Group::Secp256k1.generator.multiply_by_scalar(private_key)
-  public_key_string = ECDSA::Format::PointOctetString.encode(public_key, compression: true).unpack('H*')[0]
+  public_key_string = ECDSA::Format::PointOctetString.encode(public_key).unpack('H*')[0]
 
   unless public_key_string == referenced_address
     pp 'trying to sign an input with private key that does not match the address that is referenced in txIn'
@@ -139,7 +139,7 @@ def update_unspent_tx_outs(new_transactions, unspent_tx_outs)
 
   consumed_tx_outs = new_transactions
     .map { |t| t.tx_ins }
-    .reduce(+)
+    .reduce(:+)
     .map { |tx_in| UnspentTxOut.new(tx_in.tx_out_id, tx_in.tx_out_index, '', 0) }
 
   unspent_tx_outs
@@ -199,8 +199,45 @@ end
 def is_valid_block_transactions?(transactions, unspent_tx_outs, block_index)
   coinbase_tx = transactions[0]
   unless is_valid_coinbase_tx?(coinbase_tx, block_index)
-    pp 'invalid coinbase tran'
+    pp 'invalid coinbase transaction: ' + coinbase_tx.to_json
+    return false
   end
+
+  tx_ins = transactions
+    .map { |tx| tx.tx_ins }
+    .flatten(1)
+
+  if has_duplicates(tx_ins)
+    return false
+  end
+
+  normal_transactions = transactions.slice(1)
+  normal_transactions
+    .map { |tx| is_transaction_valid?(tx, unspent_tx_outs) }
+    .return(:&)
+end
+
+def get_coinbase_transaction(address, block_index)
+  t = Transaction.new
+  tx_in = TxIn.new
+  tx_in.signature = ''
+  tx_in.tx_out_id = ''
+  tx_in.tx_out_index = block_index
+
+  t.tx_ins = [tx_in]
+  t.tx_outs = [TxOut.new(address, COINBASE_AMOUNT)]
+  t.id = get_transaction_id(t)
+
+  t
+end
+
+def process_transactions(transactions, unspent_tx_outs, block_index)
+  unless is_valid_block_transactions?(transactions, unspent_tx_outs, block_index)
+    pp 'invalid block transaction'
+    return nil
+  end
+
+  update_unspent_tx_outs(transactions, unspent_tx_outs)
 end
 
 
