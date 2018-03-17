@@ -2,6 +2,7 @@ require 'pp'
 require 'json'
 require_relative 'block'
 require_relative 'transaction'
+require_relative 'wallet'
 
 class BlockChain
 
@@ -20,7 +21,18 @@ class BlockChain
     @blocks[@blocks.length - 1]
   end
 
-  def generate_next_block(block_data)
+  def generate_next_block
+    coinbase_tx = get_coinbase_transaction(get_public_from_wallet, get_latest_block.index + 1)
+    generate_raw_next_block([coinbase_tx])
+  end
+
+  def generate_next_block_with_transaction(receiver_address, amount)
+    coinbase_tx = get_coinbase_transaction(get_public_from_wallet, get_latest_block.index + 1)
+    tx = create_transaction(receiver_address, amount, get_private_from_wallet, @unspent_tx_outs)
+    generate_raw_next_block([coinbase_tx, tx])
+  end
+
+  def generate_raw_next_block(block_data)
     previous_block = get_latest_block
     next_index = previous_block.index + 1
     next_time_stamp = Time.now.to_i

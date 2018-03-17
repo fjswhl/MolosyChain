@@ -22,7 +22,17 @@ end
 
 App.post '/mineBlock' do
   data = JSON.parse(request.body.read)
-  new_block = blockchain.generate_next_block(data['data']) do
+  new_block = blockchain.generate_next_block do
+    p2p_network.broadcast_response_latest_msg
+    pp 'block added: ' + new_block.to_json
+  end
+end
+
+App.post 'mineTransaction' do
+  data = JSON.parse(request.body.read)
+  address = data['address']
+  amount = data['amount']
+  new_block = blockchain.generate_next_block_with_transaction(address, amount) do
     p2p_network.broadcast_response_latest_msg
     pp 'block added: ' + new_block.to_json
   end

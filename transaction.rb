@@ -10,18 +10,41 @@ class TxOut
     @address = address
     @amount = amount
   end
+
+  def to_json(*args)
+    {
+      :address => address,
+      :amount => amount
+    }.to_json(*args)
+  end
 end
 
 class TxIn
   attr_accessor :tx_out_id,
                 :tx_out_index,
                 :signature
+
+  def to_json(*args)
+    {
+      :tx_out_id => tx_out_id,
+      :tx_out_index => tx_out_index,
+      :signature => signature
+    }.to_json(*args)
+  end
 end
 
 class Transaction
   attr_accessor :id,
                 :tx_ins,
                 :tx_outs
+
+  def to_json(*args)
+    {
+      :id => id,
+      :tx_ins => tx_ins,
+      :tx_outs => tx_outs
+    }.to_json(*args)
+  end
 end
 
 class UnspentTxOut
@@ -35,6 +58,15 @@ class UnspentTxOut
     @tx_out_index = tx_out_index
     @address = address
     @amount = amount
+  end
+
+  def to_json(*args)
+    {
+      :tx_out_id => tx_out_id,
+      :tx_out_index => tx_out_index,
+      :address => address,
+      :amount => amount
+    }.to_json(*args)
   end
 end
 
@@ -239,23 +271,3 @@ def process_transactions(transactions, unspent_tx_outs, block_index)
 
   update_unspent_tx_outs(transactions, unspent_tx_outs)
 end
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

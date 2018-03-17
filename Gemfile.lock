@@ -2,6 +2,7 @@ GEM
   remote: https://rubygems.org/
   specs:
     daemons (1.2.6)
+    ecdsa (1.2.0)
     eventmachine (1.2.5)
     mustermann (1.0.2)
     rack (2.0.1)
@@ -32,6 +33,7 @@ PLATFORMS
   ruby
 
 DEPENDENCIES
+  ecdsa
   sinatra
   thin
   websocket-eventmachine-client
