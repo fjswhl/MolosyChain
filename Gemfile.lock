@@ -1,5 +1,5 @@
 GEM
-  remote: https://rubygems.org/
+  remote: https://gems.ruby-china.org/
   specs:
     daemons (1.2.6)
     ecdsa (1.2.0)
@@ -8,6 +8,7 @@ GEM
     rack (2.0.1)
     rack-protection (2.0.1)
       rack
+    ruby_deep_clone (0.8.0)
     sinatra (2.0.1)
       mustermann (~> 1.0)
       rack (~> 2.0)
@@ -34,10 +35,11 @@ PLATFORMS
 
 DEPENDENCIES
   ecdsa
+  ruby_deep_clone
   sinatra
   thin
   websocket-eventmachine-client
   websocket-eventmachine-server
 
 BUNDLED WITH
-   1.12.5
+   1.16.1
