@@ -1,10 +1,13 @@
 require 'websocket-eventmachine-client'
 require 'websocket-eventmachine-server'
+require_relative 'transaction_pool'
 
 module MessageType
   QUERY_LATEST = 0
   QUERY_ALL = 1
   RESPONSE_BLOCKCHAIN = 2
+  QUERY_TRANSACTION_POOL = 3
+  RESPONSE_TRANSACTION_POOL = 4
 end
 
 class P2PNetwork
@@ -66,6 +69,8 @@ class P2PNetwork
           write(ws, response_chain_msg)
         when MessageType::RESPONSE_BLOCKCHAIN
           handle_blockchain_response(message)
+        when MessageType::RESPONSE_TRANSACTION_POOL
+
       end
     end
 
@@ -86,6 +91,10 @@ class P2PNetwork
     broadcast(response_latest_msg)
   end
 
+  def broadcast_transaction_pool
+    broadcast(response_transaction_pool_msg)
+  end
+
   def response_chain_msg
     { :type => MessageType::RESPONSE_BLOCKCHAIN, :data => @blockchain.blocks }
   end
@@ -100,6 +109,14 @@ class P2PNetwork
 
   def query_chain_length_msg
     { :type => MessageType::QUERY_LATEST }
+  end
+
+  def query_transaction_pool_msg
+    { :type => MessageType::QUERY_TRANSACTION_POOL }
+  end
+
+  def response_transaction_pool_msg
+    { :type => MessageType::RESPONSE_TRANSACTION_POOL, :data => [get_transaction_pool] }
   end
 
   def handle_blockchain_response(message)

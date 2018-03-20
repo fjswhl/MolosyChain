@@ -3,6 +3,7 @@ require 'json'
 require_relative 'block'
 require_relative 'transaction'
 require_relative 'wallet'
+require_relative 'transaction_pool'
 
 class BlockChain
 
@@ -153,6 +154,10 @@ class BlockChain
     blocks.map { |block| block.difficulty }
       .map { |difficulty| 2**difficulty }
       .reduce(:+)
+  end
+
+  def handle_received_transaction(transaction)
+    add_to_transaction_pool(transaction, @unspent_tx_outs)
   end
 end
 
